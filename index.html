@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoPrint Parça Görüntüleyici</title>
+    <title>CoPrint File Explorer</title>
     
     <script type="importmap">
         {
@@ -15,206 +15,127 @@
     </script>
 
     <style>
-        /* Modern ve Temiz Tasarım */
-        body { font-family: 'Segoe UI', sans-serif; background: #f6f8fa; padding: 20px; max-width: 900px; margin: 0 auto; color: #24292f; }
-        h1 { text-align: center; border-bottom: 1px solid #d0d7de; padding-bottom: 15px; }
-
-        /* Navigasyon (Breadcrumb) */
-        .breadcrumb { background: #fff; padding: 12px; border: 1px solid #d0d7de; border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
-        .breadcrumb a { text-decoration: none; color: #0969da; }
-        .breadcrumb a:hover { text-decoration: underline; }
-        .breadcrumb span { color: #57606a; margin: 0 5px; }
-
-        /* Liste Elemanları */
-        .item-card {
-            background: #fff; border: 1px solid #d0d7de; padding: 15px; margin-bottom: 10px; border-radius: 6px;
-            display: flex; flex-direction: column; gap: 10px; transition: box-shadow 0.2s;
-        }
-        .item-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
-
-        .item-header { display: flex; justify-content: space-between; align-items: center; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; padding: 20px; max-width: 900px; margin: 0 auto; color: #333; }
+        h3 { border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; }
         
-        .folder-link { text-decoration: none; color: #24292f; font-weight: bold; display: flex; align-items: center; gap: 8px; width: 100%; }
-        .folder-link:hover { color: #0969da; }
-
-        .btn { padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; border: 1px solid rgba(27, 31, 35, 0.15); cursor: pointer; }
-        .btn-preview { background-color: #f6f8fa; color: #24292f; margin-right: 5px; }
-        .btn-preview:hover { background-color: #f3f4f6; }
-        .btn-download { background-color: #2ea44f; color: white; border-color: rgba(27, 31, 35, 0.15); }
-        .btn-download:hover { background-color: #2c974b; }
-
-        /* 3D Viewer Alanı */
-        .viewer-box {
-            width: 100%; height: 350px; background: #1a1a1a; 
-            border-radius: 6px; margin-top: 10px; display: none; position: relative;
+        .breadcrumb { background: white; padding: 15px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 5px; font-weight: 500;}
+        .breadcrumb a { text-decoration: none; color: #007bff; }
+        
+        .item-card {
+            background: white; padding: 15px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px;
+            display: flex; flex-direction: column; 
         }
-        .loading-text {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #fff; font-family: monospace;
-        }
+        
+        .row-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+        /* Tags */
+        .tag { font-size: 0.75em; padding: 3px 8px; border-radius: 4px; margin-left: 10px; font-weight: bold; text-transform: uppercase; }
+        .tag-dir { background: #e1ecf4; color: #007bff; }
+        .tag-stl { background: #d4edda; color: #155724; }
+        .tag-other { background: #f0f0f0; color: #666; }
+
+        /* Buttons */
+        .btn { padding: 6px 16px; text-decoration: none; color: white; border-radius: 4px; border: none; cursor: pointer; font-size: 0.9em; font-weight: 600; }
+        .btn-folder { background: #6c757d; }
+        .btn-folder:hover { background: #5a6268; }
+        .btn-preview { background: #007bff; margin-right: 5px; }
+        .btn-preview:hover { background: #0056b3; }
+        .btn-download { background: #28a745; }
+        .btn-download:hover { background: #218838; }
+
+        .viewer-box { width: 100%; height: 400px; background: #222; margin-top: 15px; display: none; border-radius: 5px; overflow: hidden;}
     </style>
 </head>
 <body>
 
-    <h1>Assembling Parts Deposu</h1>
-
+    <h3>CoPrint File Explorer</h3>
+    
     <div class="breadcrumb" id="breadcrumb">
-        <a href="?path=">🏠 Ana Dizin</a>
+        <a href="?path=">🏠 Home</a>
     </div>
 
-    <div id="file-list">
-        <p style="text-align:center">Yükleniyor...</p>
-    </div>
+    <div id="file-list" style="text-align: center;">Loading...</div>
 
     <script type="module">
         import * as THREE from 'three';
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        // --- AYARLAR ---
+        // --- SETTINGS ---
         const owner = 'coprint';
         const repo = 'AssemblingParts';
-        // ---------------
+        const branch = 'main'; // Change to 'master' if needed
+        // ----------------
 
-        // URL'den mevcut klasör yolunu al
         const params = new URLSearchParams(window.location.search);
         const currentPath = params.get('path') || '';
 
-        // Breadcrumb Güncelle
-        const breadcrumb = document.getElementById('breadcrumb');
-        if (currentPath) {
-            const parts = currentPath.split('/');
-            let builtPath = '';
-            parts.forEach(part => {
-                builtPath += (builtPath ? '/' : '') + part;
-                breadcrumb.innerHTML += ` <span>/</span> <a href="?path=${builtPath}">${part}</a>`;
-            });
+        // Breadcrumb
+        const bc = document.getElementById('breadcrumb');
+        if(currentPath) {
+            // Simple split for better breadcrumb visuals could be added here, 
+            // but keeping it simple as requested.
+            bc.innerHTML += ` <span>/ ${currentPath}</span>`;
         }
 
-        // 3D Gösterme Fonksiyonu (Global erişim için window'a atadık)
-        window.togglePreview = function(url, containerId) {
-            const container = document.getElementById(containerId);
-            
-            // Açıksa kapat
-            if (container.style.display === 'block') {
-                container.style.display = 'none';
-                container.innerHTML = ''; // Belleği temizle
-                return;
-            }
-
-            // Kapalıysa aç ve Yükle
-            container.style.display = 'block';
-            container.innerHTML = '<div class="loading-text">Model Yükleniyor...</div>';
-
-            initThreeJS(url, container);
-        };
-
-        function initThreeJS(url, container) {
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a1a);
-
-            const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-            camera.position.set(0, 0, 100);
-
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(width, height);
-            container.innerHTML = ''; // Loading yazısını sil
-            container.appendChild(renderer.domElement);
-
-            const controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-
-            // Işıklandırma
-            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-            dirLight.position.set(50, 50, 50);
-            scene.add(dirLight);
-
-            // Dosyayı Yükle
-            const loader = new STLLoader();
-            loader.load(url, function (geometry) {
-                geometry.center(); // Modeli merkeze al
-                
-                // Rastgele renk yerine endüstriyel gri/turuncu
-                const material = new THREE.MeshPhongMaterial({ color: 0xff5500, specular: 0x111111, shininess: 200 });
-                const mesh = new THREE.Mesh(geometry, material);
-
-                // Modeli düzelt (STL genelde ters gelir)
-                mesh.rotation.x = -Math.PI / 2;
-                
-                scene.add(mesh);
-
-                // Kamerayı modele göre zoomla
-                const box = new THREE.Box3().setFromObject(mesh);
-                const size = box.getSize(new THREE.Vector3()).length();
-                const center = box.getCenter(new THREE.Vector3());
-                
-                camera.position.copy(center);
-                camera.position.z += size * 1.5;
-                camera.lookAt(center);
-
-            }, undefined, function (error) {
-                container.innerHTML = '<div class="loading-text" style="color:#ff6b6b">Yükleme Hatası!</div>';
-            });
-
-            function animate() {
-                requestAnimationFrame(animate);
-                controls.update();
-                renderer.render(scene, camera);
-            }
-            animate();
-        }
-
-        // API'den Verileri Çek
-        async function fetchRepoContents() {
+        // LIST FILES
+        async function listFiles() {
             const listArea = document.getElementById('file-list');
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}`;
-
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}`;
+            
             try {
-                const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error(`API Hatası: ${response.status}`);
+                const req = await fetch(url);
+                if(!req.ok) throw new Error('Repository or folder not found!');
+                const data = await req.json();
+
+                listArea.innerHTML = ''; // Clear loading text
                 
-                const data = await response.json();
-                listArea.innerHTML = '';
+                // Sort: Folders first
+                data.sort((a,b) => (a.type===b.type ? 0 : a.type==='dir' ? -1 : 1));
 
-                // Önce Klasörleri, Sonra Dosyaları Sırala
-                data.sort((a, b) => (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1));
+                if(data.length === 0) {
+                    listArea.innerHTML = '<p>Folder is empty.</p>'; 
+                    return;
+                }
 
-                if(data.length === 0) { listArea.innerHTML = '<p style="text-align:center">Klasör boş.</p>'; return; }
-
-                data.forEach((item, index) => {
+                data.forEach((item, idx) => {
                     const div = document.createElement('div');
                     div.className = 'item-card';
-                    
+
+                    // 1. FOLDER
                     if (item.type === 'dir') {
-                        // KLASÖR GÖRÜNÜMÜ
                         const nextPath = currentPath ? `${currentPath}/${item.name}` : item.name;
                         div.innerHTML = `
-                            <div class="item-header">
-                                <a href="?path=${nextPath}" class="folder-link">📂 ${item.name}</a>
+                            <div class="row-content">
+                                <div>
+                                    <b>📂 ${item.name}</b> 
+                                    <span class="tag tag-dir">FOLDER</span>
+                                </div>
+                                <a href="?path=${nextPath}" class="btn btn-folder">Open &rarr;</a>
                             </div>`;
-                    } else {
-                        // DOSYA GÖRÜNÜMÜ
-                        const isSTL = item.name.toLowerCase().endsWith('.stl');
-                        const viewerId = `view-${index}`;
+                    } 
+                    // 2. FILES
+                    else {
+                        const isSTL = item.name.toUpperCase().endsWith('.STL');
+                        const viewerId = `view-${idx}`;
                         
-                        let buttonsHtml = `<a href="${item.download_url}" class="btn btn-download" target="_blank">⬇ İndir</a>`;
+                        let label = isSTL ? '<span class="tag tag-stl">STL MODEL</span>' : '<span class="tag tag-other">FILE</span>';
                         
-                        // Sadece STL ise Önizle butonu ekle
+                        let buttons = `<a href="${item.download_url}" class="btn btn-download" target="_blank">Download</a>`;
+                        
                         if (isSTL) {
-                            buttonsHtml = `
-                                <button class="btn btn-preview" onclick="togglePreview('${item.download_url}', '${viewerId}')">👁️ Önizle</button>
-                                ${buttonsHtml}
-                            `;
+                             buttons = `
+                                <button class="btn btn-preview" onclick="openViewer('${item.path}', '${viewerId}')">👁️ 3D Preview</button>
+                                ${buttons}
+                             `;
                         }
 
                         div.innerHTML = `
-                            <div class="item-header">
-                                <span>📄 ${item.name}</span>
-                                <div>${buttonsHtml}</div>
+                            <div class="row-content">
+                                <div>
+                                    📄 ${item.name} ${label}
+                                </div>
+                                <div>${buttons}</div>
                             </div>
                             <div id="${viewerId}" class="viewer-box"></div>
                         `;
@@ -222,12 +143,80 @@
                     listArea.appendChild(div);
                 });
 
-            } catch (error) {
-                listArea.innerHTML = `<p style="color:red; text-align:center">Veriler çekilemedi. (${error.message})<br>GitHub API limiti dolmuş olabilir.</p>`;
+            } catch (err) {
+                listArea.innerHTML = `<p style="color:red">Error: ${err.message}<br>Check API limits or repo name.</p>`;
             }
         }
 
-        fetchRepoContents();
+        // 3D VIEWER FUNCTION
+        window.openViewer = function(filePath, containerId) {
+            const container = document.getElementById(containerId);
+            
+            // Toggle Logic
+            if(container.style.display === 'block') {
+                container.style.display = 'none'; 
+                container.innerHTML = ''; // Clear memory
+                return;
+            }
+
+            container.style.display = 'block';
+            container.innerHTML = '<p style="color:white;text-align:center;padding-top:150px;">Loading Model...</p>';
+
+            // CDN Link Construction
+            const cdnUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${filePath}`;
+
+            const width = container.clientWidth;
+            const height = 400;
+            
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2a2a2a);
+            
+            const camera = new THREE.PerspectiveCamera(45, width/height, 0.1, 2000);
+            const renderer = new THREE.WebGLRenderer({antialias:true});
+            renderer.setSize(width, height);
+            
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            // Lights
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(50,50,50);
+            scene.add(light);
+
+            new STLLoader().load(cdnUrl, (geo) => {
+                container.innerHTML='';
+                container.appendChild(renderer.domElement);
+                
+                geo.center();
+                const material = new THREE.MeshPhongMaterial({color:0x00ccff, specular:0x111111, shininess: 100});
+                const mesh = new THREE.Mesh(geo, material);
+                
+                mesh.rotation.x = -Math.PI/2; // Fix orientation
+                scene.add(mesh);
+                
+                // Auto Zoom
+                const box = new THREE.Box3().setFromObject(mesh);
+                const size = box.getSize(new THREE.Vector3()).length();
+                camera.position.set(size, size, size);
+                camera.lookAt(0,0,0);
+
+                function animate(){ 
+                    requestAnimationFrame(animate); 
+                    controls.update(); 
+                    renderer.render(scene, camera); 
+                }
+                animate();
+
+            }, (xhr) => {
+                 // Progress log could go here
+            }, (err) => {
+                container.innerHTML = '<p style="color:#ff6b6b;text-align:center;padding-top:150px;">Error: Could not load file.<br>Check branch name or file integrity.</p>';
+                console.error(err);
+            });
+        };
+
+        listFiles();
     </script>
 </body>
 </html>
