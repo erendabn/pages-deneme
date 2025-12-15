@@ -3,117 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoPrint Dosya Tarayıcısı</title>
+    <title>STL Görüntüleyici</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f4f4f4; }
-        h1 { text-align: center; color: #333; }
-        
-        /* Breadcrumb (Geri Dönme Navigasyonu) */
-        .breadcrumb {
-            background: white; padding: 10px; border-radius: 5px; margin-bottom: 20px;
-            border: 1px solid #ddd;
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+        .file-card {
+            background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px;
+            display: flex; flex-direction: column; gap: 10px; border: 1px solid #ddd;
         }
-        .breadcrumb a { text-decoration: none; color: #0969da; font-weight: bold; }
-        .breadcrumb span { color: #666; }
-
-        /* Liste Tasarımı */
-        .list-container { display: flex; flex-direction: column; gap: 10px; }
+        .file-info { display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 5px 10px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
+        .btn-preview { background: #0969da; color: white; }
+        .btn-download { background: #2ea44f; color: white; text-decoration: none; }
         
-        .item-card {
-            background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd;
-            display: flex; justify-content: space-between; align-items: center;
-            text-decoration: none; color: #333; transition: 0.2s;
+        /* 3D Görüntüleme Alanı */
+        .viewer-container {
+            width: 100%; height: 300px; background: #333; 
+            display: none; /* Başlangıçta gizli */
+            border-radius: 4px; overflow: hidden; position: relative;
         }
-        .item-card:hover { background: #eef; border-color: #ccf; }
-        
-        .type-dir { font-weight: bold; color: #0969da; } /* Klasör rengi */
-        .type-file { color: #555; } /* Dosya rengi */
-        
-        .btn-download {
-            background: #2ea44f; color: white; padding: 5px 10px; 
-            border-radius: 4px; text-decoration: none; font-size: 0.9em;
-        }
-        .btn-download:hover { background: #2c974b; }
     </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
 
-    <h1>CoPrint Parça Deposu</h1>
+    <h1>STL Dosyaları</h1>
+    <div id="list-area">Yükleniyor...</div>
 
-    <div class="breadcrumb" id="breadcrumb">
-        <a href="?path=">🏠 Ana Dizin</a>
-    </div>
+    <script type="module">
+        import * as THREE from 'three';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    <div id="content-area" class="list-container">
-        Loading...
-    </div>
-
-    <script>
         const owner = 'coprint';
         const repo = 'AssemblingParts';
-        
-        // 1. URL'den 'path' parametresini al (Yoksa boş kabul et)
-        const params = new URLSearchParams(window.location.search);
-        const currentPath = params.get('path') || '';
+        const path = ''; // Ana dizin
 
-        // API Adresini oluştur
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}`;
-
-        async function loadContent() {
-            const container = document.getElementById('content-area');
-            const breadcrumb = document.getElementById('breadcrumb');
-
-            // Breadcrumb güncelleme (Hangi klasördeyiz?)
-            if (currentPath) {
-                breadcrumb.innerHTML += ` <span>/ ${currentPath}</span>`;
+        // STL Gösterme Fonksiyonu
+        window.showSTL = async (url, containerId) => {
+            const container = document.getElementById(containerId);
+            
+            // Eğer zaten açıksa kapat
+            if (container.style.display === 'block') {
+                container.style.display = 'none';
+                container.innerHTML = ''; // İçini temizle (Bellek dostu olması için)
+                return;
             }
 
+            container.style.display = 'block';
+            container.innerHTML = '<p style="color:white; text-align:center; padding-top:20px;">Model Yükleniyor...</p>';
+
+            // 1. Sahne Kurulumu
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x333333);
+
+            // 2. Kamera
+            const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 0, 150);
+
+            // 3. Renderer (Çizici)
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.innerHTML = ''; // "Yükleniyor" yazısını sil
+            container.appendChild(renderer.domElement);
+
+            // 4. Işıklar
+            const ambientLight = new THREE.AmbientLight(0x404040, 2); 
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+            dirLight.position.set(1, 1, 1);
+            scene.add(dirLight);
+
+            // 5. Kontroller (Mouse ile çevirme)
+            const controls = new OrbitControls(camera, renderer.domElement);
+
+            // 6. STL Yükleyici
+            const loader = new STLLoader();
+            loader.load(
+                url,
+                function (geometry) {
+                    // Modeli ortala ve materyal ekle
+                    geometry.center(); 
+                    const material = new THREE.MeshPhongMaterial({ color: 0x00ff00, specular: 0x111111, shininess: 200 });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    
+                    // Boyutu ekrana sığacak şekilde ayarla (Scale)
+                    // (Basit bir normalizasyon)
+                    mesh.rotation.x = -Math.PI / 2; 
+                    scene.add(mesh);
+
+                    // Kamerayı modele göre ayarla
+                    const box = new THREE.Box3().setFromObject(mesh);
+                    const size = box.getSize(new THREE.Vector3()).length();
+                    camera.position.z = size * 1.5;
+                },
+                (xhr) => { console.log((xhr.loaded / xhr.total * 100) + '% yüklendi'); },
+                (error) => { container.innerHTML = '<p style="color:red">Hata oluştu</p>'; }
+            );
+
+            // 7. Animasyon Döngüsü
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        };
+
+        // Dosyaları Listeleme
+        async function loadFiles() {
+            const container = document.getElementById('list-area');
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            
             try {
-                const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error('Hata: İçerik bulunamadı.');
-                
-                const data = await response.json();
+                const req = await fetch(apiUrl);
+                const data = await req.json();
                 container.innerHTML = '';
 
-                // Gelen veriyi sırala: Önce Klasörler, Sonra Dosyalar
-                data.sort((a, b) => (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1));
+                // Sadece STL dosyalarını al
+                const files = data.filter(item => item.name.toLowerCase().endsWith('.stl'));
 
-                if (data.length === 0) container.innerHTML = '<p>Bu klasör boş.</p>';
-
-                data.forEach(item => {
+                files.forEach((file, index) => {
+                    const uniqueId = `viewer-${index}`;
                     const div = document.createElement('div');
-                    
-                    if (item.type === 'dir') {
-                        // EĞER KLASÖRSE: Tıklayınca URL'i güncelle (?path=yeni/yol)
-                        // Mevcut yol varsa üzerine ekle, yoksa direkt klasör adı
-                        const nextPath = currentPath ? `${currentPath}/${item.name}` : item.name;
-                        
-                        div.innerHTML = `
-                            <a href="?path=${nextPath}" class="item-card">
-                                <span class="type-dir">📁 ${item.name}</span>
-                                <span>Git &rarr;</span>
-                            </a>
-                        `;
-                    } else {
-                        // EĞER DOSYAYSA: İndirme linki koy
-                        // Sadece STL dosyalarını göstermek istersen buraya if ekleyebiliriz
-                        div.innerHTML = `
-                            <div class="item-card">
-                                <span class="type-file">📄 ${item.name}</span>
-                                <a href="${item.download_url}" class="btn-download" target="_blank">İndir</a>
+                    div.className = 'file-card';
+                    div.innerHTML = `
+                        <div class="file-info">
+                            <strong>${file.name}</strong>
+                            <div>
+                                <button class="btn btn-preview" onclick="showSTL('${file.download_url}', '${uniqueId}')">👁️ Önizle</button>
+                                <a href="${file.download_url}" class="btn btn-download">İndir</a>
                             </div>
-                        `;
-                    }
+                        </div>
+                        <div id="${uniqueId}" class="viewer-container"></div>
+                    `;
                     container.appendChild(div);
                 });
 
-            } catch (error) {
-                container.innerHTML = `<p style="color:red">${error.message}</p>`;
+            } catch (e) {
+                console.log(e);
             }
         }
 
-        loadContent();
+        loadFiles();
     </script>
-
 </body>
 </html>
