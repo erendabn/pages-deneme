@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoPrint Dosya Tarayıcısı</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f4f4f4; }
+        h1 { text-align: center; color: #333; }
+        
+        /* Breadcrumb (Geri Dönme Navigasyonu) */
+        .breadcrumb {
+            background: white; padding: 10px; border-radius: 5px; margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        .breadcrumb a { text-decoration: none; color: #0969da; font-weight: bold; }
+        .breadcrumb span { color: #666; }
+
+        /* Liste Tasarımı */
+        .list-container { display: flex; flex-direction: column; gap: 10px; }
+        
+        .item-card {
+            background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd;
+            display: flex; justify-content: space-between; align-items: center;
+            text-decoration: none; color: #333; transition: 0.2s;
+        }
+        .item-card:hover { background: #eef; border-color: #ccf; }
+        
+        .type-dir { font-weight: bold; color: #0969da; } /* Klasör rengi */
+        .type-file { color: #555; } /* Dosya rengi */
+        
+        .btn-download {
+            background: #2ea44f; color: white; padding: 5px 10px; 
+            border-radius: 4px; text-decoration: none; font-size: 0.9em;
+        }
+        .btn-download:hover { background: #2c974b; }
+    </style>
+</head>
+<body>
+
+    <h1>CoPrint Parça Deposu</h1>
+
+    <div class="breadcrumb" id="breadcrumb">
+        <a href="?path=">🏠 Ana Dizin</a>
+    </div>
+
+    <div id="content-area" class="list-container">
+        Loading...
+    </div>
+
+    <script>
+        const owner = 'coprint';
+        const repo = 'AssemblingParts';
+        
+        // 1. URL'den 'path' parametresini al (Yoksa boş kabul et)
+        const params = new URLSearchParams(window.location.search);
+        const currentPath = params.get('path') || '';
+
+        // API Adresini oluştur
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}`;
+
+        async function loadContent() {
+            const container = document.getElementById('content-area');
+            const breadcrumb = document.getElementById('breadcrumb');
+
+            // Breadcrumb güncelleme (Hangi klasördeyiz?)
+            if (currentPath) {
+                breadcrumb.innerHTML += ` <span>/ ${currentPath}</span>`;
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Hata: İçerik bulunamadı.');
+                
+                const data = await response.json();
+                container.innerHTML = '';
+
+                // Gelen veriyi sırala: Önce Klasörler, Sonra Dosyalar
+                data.sort((a, b) => (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1));
+
+                if (data.length === 0) container.innerHTML = '<p>Bu klasör boş.</p>';
+
+                data.forEach(item => {
+                    const div = document.createElement('div');
+                    
+                    if (item.type === 'dir') {
+                        // EĞER KLASÖRSE: Tıklayınca URL'i güncelle (?path=yeni/yol)
+                        // Mevcut yol varsa üzerine ekle, yoksa direkt klasör adı
+                        const nextPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+                        
+                        div.innerHTML = `
+                            <a href="?path=${nextPath}" class="item-card">
+                                <span class="type-dir">📁 ${item.name}</span>
+                                <span>Git &rarr;</span>
+                            </a>
+                        `;
+                    } else {
+                        // EĞER DOSYAYSA: İndirme linki koy
+                        // Sadece STL dosyalarını göstermek istersen buraya if ekleyebiliriz
+                        div.innerHTML = `
+                            <div class="item-card">
+                                <span class="type-file">📄 ${item.name}</span>
+                                <a href="${item.download_url}" class="btn-download" target="_blank">İndir</a>
+                            </div>
+                        `;
+                    }
+                    container.appendChild(div);
+                });
+
+            } catch (error) {
+                container.innerHTML = `<p style="color:red">${error.message}</p>`;
+            }
+        }
+
+        loadContent();
+    </script>
+
+</body>
+</html>
